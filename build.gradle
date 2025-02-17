@@ -1,5 +1,7 @@
 plugins {
     id 'java'
+   // id 'distribution'
+    id 'application'
 }
 
 group 'org.example'
@@ -19,12 +21,10 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
-mainClassName='edu.mcw.rgd.ontomate.PostgressAILoader'
+String mainClassName='edu.mcw.rgd.ontomate.PostgressAILoader'
 String appName='PosgressAILoader'
 
 project.archivesBaseName = appName
-
-
 
 repositories {
     mavenCentral()
@@ -103,10 +103,11 @@ distributions {
 }
 
 task createDistro(type: Copy) {
-    def zipFile = file('build/distributions/'+appName+'.zip')
+    def zipFile = file('build/distributions/'+appName+'-' + version + '.zip')
     def outputDir = file("build/install")
 
     from zipTree(zipFile)
     into outputDir
 }
 createDistro.dependsOn assembleDist
+createDistro.dependsOn distZip
