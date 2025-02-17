@@ -2,7 +2,7 @@
 
 . /etc/profile
 
-APPNAME=PostgressAILoader-1.0
+APPNAME=PosgressAILoader-1.0
 APPDIR=/home/rgddata/pipelines/$APPNAME
 
 cd $APPDIR
