@@ -30,7 +30,7 @@ public class PostgressAILoader extends Thread{
     public static AtomicInteger totalProcessed=new AtomicInteger(0);
     String abstractText;
     String pmid;
-    public static String lud = "2025-02-11";
+    public static String lud = "2025-02-19";
 
     public PostgressAILoader(String abstractText,String pmid) {
         this.abstractText=abstractText;
@@ -95,12 +95,15 @@ public class PostgressAILoader extends Thread{
         int count=0;
 
         for (int i=0; i< val.length;i++) {
-            if(isEmpty(val[i])) {
+            String currentValue=val[i].trim();
+
+            if(isEmpty(currentValue)) {
                 continue;
             }
 
             count=0;
-            int index = abstractText.indexOf(val[i]);
+            int index = abstractText.indexOf(currentValue);
+
 
             if (index == -1) {
                 posString+= "|0;0-0";
@@ -108,9 +111,9 @@ public class PostgressAILoader extends Thread{
 
             // Keep searching as long as we find a valid index
             while (index != -1) {
-                posString=posString + "|" + "2;" + index + "-" + val[i].length();
+                posString=posString + "|" + "1;" + index + "-" + (index + currentValue.length());
                 // Move 1 character ahead to find subsequent (possibly overlapping) occurrences
-                index = abstractText.indexOf(val[i], index + 1);
+                index = abstractText.indexOf(currentValue, index + 1);
                 count++;
 
                 if (count == 50) {
@@ -119,14 +122,10 @@ public class PostgressAILoader extends Thread{
             }
 
             countString += " | " + count;
-            geneString += " | " + val[i];
+            geneString += " | " + currentValue;
             count=0;
 
         }
-        System.out.println("---");
-        System.out.println(posString);
-        System.out.println(countString);
-        System.out.println(geneString);
 
         hm = new HashMap<String,String>();
         hm.put("positions",posString.substring(1));
@@ -307,6 +306,8 @@ public class PostgressAILoader extends Thread{
                  ResultSet rs = stmt.executeQuery(
                          "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "')")) {
 
+                  //ResultSet rs = stmt.executeQuery(
+                  //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
                 while (rs.next()) {
                     String pmid = rs.getString("pmid");
                     String abstractText = rs.getString("abstract");
