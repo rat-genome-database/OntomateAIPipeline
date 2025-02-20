@@ -49,9 +49,9 @@ public class PostgressAILoader extends Thread{
 
                 totalProcessed.getAndIncrement();
 
-                if ((totalProcessed.get() % 100) == 0) {
+                //if ((totalProcessed.get() % 100) == 0) {
                     System.out.println(totalProcessed.get());
-                }
+                //}
 
                 OllamaChatModel model = OllamaChatModel.builder()
                         //.baseUrl("http://localhost:11434") // Ollama's default port
