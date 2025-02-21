@@ -65,6 +65,7 @@ public class PostgressAILoader extends Thread{
 
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
                 String genes = model.generate(prompt);
+                System.out.println("got list");
 
                 HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
 
@@ -322,6 +323,7 @@ public class PostgressAILoader extends Thread{
                 }
 
             } catch (SQLException e) {
+                System.out.println("here 1");
                 e.printStackTrace();
             } finally {
                 // Tell the executor to stop accepting new tasks
