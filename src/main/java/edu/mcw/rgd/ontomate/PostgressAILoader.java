@@ -99,9 +99,13 @@ public class PostgressAILoader extends Thread{
         for (int i=0; i< val.length;i++) {
             String currentValue=val[i].trim();
 
+
+
             if(isEmpty(currentValue)) {
                 continue;
             }
+
+            System.out.println("currentValue = " + currentValue);
 
             count=0;
             int index = abstractText.indexOf(currentValue);
@@ -118,7 +122,7 @@ public class PostgressAILoader extends Thread{
                 index = abstractText.indexOf(currentValue, index + 1);
                 count++;
 
-                if (count == 50) {
+                if (count == 10) {
                     System.out.println("count was 50 " + posString);
                     break;
                 }
