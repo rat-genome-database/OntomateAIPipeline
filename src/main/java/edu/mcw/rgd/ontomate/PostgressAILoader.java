@@ -122,7 +122,7 @@ public class PostgressAILoader extends Thread{
                 index = abstractText.indexOf(currentValue, index + 1);
                 count++;
 
-                if (count == 10) {
+                if (count == 100) {
                     System.out.println("count was 50 " + posString);
                     System.out.println(abstractText);
                     break;
@@ -303,7 +303,7 @@ public class PostgressAILoader extends Thread{
         while (true) {
 
             // Create a fixed thread pool with 3 threads
-            ExecutorService executor = Executors.newFixedThreadPool(1);
+            ExecutorService executor = Executors.newFixedThreadPool(5);
 
             pubDate = getDate();
             System.out.println("========== Running for " + pubDate);
