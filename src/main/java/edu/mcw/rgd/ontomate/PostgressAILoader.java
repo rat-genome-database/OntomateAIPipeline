@@ -119,7 +119,8 @@ public class PostgressAILoader extends Thread{
                 count++;
 
                 if (count == 50) {
-                    System.exit(0);
+                    System.out.println("count was 50 " + posString);
+                    break;
                 }
             }
 
