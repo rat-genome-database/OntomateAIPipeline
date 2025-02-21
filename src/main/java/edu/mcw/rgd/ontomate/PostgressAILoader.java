@@ -297,7 +297,7 @@ public class PostgressAILoader extends Thread{
         while (true) {
 
             // Create a fixed thread pool with 3 threads
-            ExecutorService executor = Executors.newFixedThreadPool(5);
+            ExecutorService executor = Executors.newFixedThreadPool(1);
 
             pubDate = getDate();
             System.out.println("========== Running for " + pubDate);
