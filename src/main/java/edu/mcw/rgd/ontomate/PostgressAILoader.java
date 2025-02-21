@@ -68,8 +68,9 @@ public class PostgressAILoader extends Thread{
                 System.out.println("got list");
 
                 HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
-
+                System.out.println("about to update");
                 this.update(pmid,hm);
+            System.out.println("updated");
 
         }catch(Exception e) {
             e.printStackTrace();
@@ -302,10 +303,12 @@ public class PostgressAILoader extends Thread{
             System.out.println("========== Running for " + pubDate);
 
             // Use try-with-resources to ensure the Connection, Statement, and ResultSet are closed automatically
-            try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+            try {
+
+                Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "')")) {
+                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "')");
 
                   //ResultSet rs = stmt.executeQuery(
                   //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
@@ -318,6 +321,7 @@ public class PostgressAILoader extends Thread{
 
                     // Submit the task to the ExecutorService instead of calling pmb.run() directly
                     executor.submit(() -> {
+                        System.out.println("submitting job");
                         pmb.run();
                     });
                 }
