@@ -57,7 +57,8 @@ public class PostgressAILoader extends Thread{
                         //.baseUrl("http://localhost:11434") // Ollama's default port
                         .baseUrl("http://grudge.rgd.mcw.edu:11434") // Ollama's default port
                         //.modelName("curatorModel") // Replace with your downloaded model
-                        .modelName("rgdLLama70") // Replace with your downloaded model
+                        //.modelName("rgdLLama70") // Replace with your downloaded model
+                        .modelName("rgdwizard7b") // Replace with your downloaded model
                         //.modelName("rgddeepseek70") // Replace with your downloaded model
                         //.modelName("rgddeepseek32") // Replace with your downloaded model
                         //.modelName("rgdllama3") // Replace with your downloaded model
@@ -65,7 +66,6 @@ public class PostgressAILoader extends Thread{
 
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
                 String genes = model.generate(prompt);
-                System.out.println("got list");
 
                 HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
                 System.out.println("about to update");
@@ -327,13 +327,12 @@ public class PostgressAILoader extends Thread{
 
                     // Submit the task to the ExecutorService instead of calling pmb.run() directly
                     executor.submit(() -> {
-                        System.out.println("submitting job");
+                        //System.out.println("submitting job");
                         pmb.run();
                     });
                 }
 
             } catch (SQLException e) {
-                System.out.println("here 1");
                 e.printStackTrace();
             } finally {
                 // Tell the executor to stop accepting new tasks
