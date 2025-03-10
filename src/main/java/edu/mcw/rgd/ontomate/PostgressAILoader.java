@@ -57,8 +57,8 @@ public class PostgressAILoader extends Thread{
                         //.baseUrl("http://localhost:11434") // Ollama's default port
                         .baseUrl("http://grudge.rgd.mcw.edu:11434") // Ollama's default port
                         //.modelName("curatorModel") // Replace with your downloaded model
-                        //.modelName("rgdLLama70") // Replace with your downloaded model
-                        .modelName("rgdwizard7b") // Replace with your downloaded model
+                        .modelName("rgdLLama70") // Replace with your downloaded model
+                        //.modelName("rgdwizard7b") // Replace with your downloaded model
                         //.modelName("rgddeepseek70") // Replace with your downloaded model
                         //.modelName("rgddeepseek32") // Replace with your downloaded model
                         //.modelName("rgdllama3") // Replace with your downloaded model
