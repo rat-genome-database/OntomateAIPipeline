@@ -72,7 +72,7 @@ dependencies {
     // https://mvnrepository.com/artifact/org.apache.solr/solr-langid
     implementation group: 'org.apache.solr', name: 'solr-langid', version: '8.11.4'
 
-
+    implementation 'com.oracle.database.jdbc:ojdbc8:21.3.0.0'
 
 }
 

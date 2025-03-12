@@ -40,7 +40,7 @@ public class PostgressAILoader extends Thread{
     public void run() {
 
         try {
-
+            System.out.println("top of run");
             if (abstractText == null || abstractText.equals("")) {
                 this.updateLastUpdate(pmid);
             }
@@ -53,7 +53,8 @@ public class PostgressAILoader extends Thread{
                     System.out.println(totalProcessed.get());
                 //}
 
-                OllamaChatModel model = OllamaChatModel.builder()
+            System.out.println("getting model");
+            OllamaChatModel model = OllamaChatModel.builder()
                         //.baseUrl("http://localhost:11434") // Ollama's default port
                         .baseUrl("http://grudge.rgd.mcw.edu:11434") // Ollama's default port
                         //.modelName("curatorModel") // Replace with your downloaded model
@@ -65,10 +66,12 @@ public class PostgressAILoader extends Thread{
                         .build();
 
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
-                String genes = model.generate(prompt);
+            System.out.println("about to run");
+            String genes = model.generate(prompt);
+            System.out.println("after model run");
 
                 HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
-                System.out.println("about to update");
+            System.out.println("updating");
                 this.update(pmid,hm);
             System.out.println("updated");
 
@@ -104,8 +107,6 @@ public class PostgressAILoader extends Thread{
             if(isEmpty(currentValue)) {
                 continue;
             }
-
-            System.out.println("currentValue = " + currentValue);
 
             count=0;
             int index = abstractText.indexOf(currentValue);
@@ -303,7 +304,7 @@ public class PostgressAILoader extends Thread{
         while (true) {
 
             // Create a fixed thread pool with 3 threads
-            ExecutorService executor = Executors.newFixedThreadPool(5);
+            ExecutorService executor = Executors.newFixedThreadPool(1);
 
             pubDate = getDate();
             System.out.println("========== Running for " + pubDate);
@@ -327,7 +328,7 @@ public class PostgressAILoader extends Thread{
 
                     // Submit the task to the ExecutorService instead of calling pmb.run() directly
                     executor.submit(() -> {
-                        //System.out.println("submitting job");
+                        System.out.println("submitting job");
                         pmb.run();
                     });
                 }
