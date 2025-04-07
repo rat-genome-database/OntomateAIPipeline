@@ -58,11 +58,11 @@ public class PostgressAILoader extends Thread{
                         //.baseUrl("http://localhost:11434") // Ollama's default port
                         .baseUrl("http://grudge.rgd.mcw.edu:11434") // Ollama's default port
                         //.modelName("curatorModel") // Replace with your downloaded model
-                        .modelName("rgdLLama70") // Replace with your downloaded model
+                        //.modelName("rgdLLama70") // Replace with your downloaded model
                         //.modelName("rgdwizard7b") // Replace with your downloaded model
                         //.modelName("rgddeepseek70") // Replace with your downloaded model
                         //.modelName("rgddeepseek32") // Replace with your downloaded model
-                        //.modelName("rgdllama3") // Replace with your downloaded model
+                        .modelName("rgdllama3") // Replace with your downloaded model
                         .build();
 
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
@@ -303,7 +303,7 @@ public class PostgressAILoader extends Thread{
 
         String pubDate = "";
 
-        while (true) {
+//        while (true) {
 
             // Create a fixed thread pool with 3 threads
             ExecutorService executor = Executors.newFixedThreadPool(3);
@@ -317,10 +317,11 @@ public class PostgressAILoader extends Thread{
                 Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "')");
+                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 1000 ROWS ONLY");
 
                   //ResultSet rs = stmt.executeQuery(
                   //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
+
                 while (rs.next()) {
                     String pmid = rs.getString("pmid");
                     String abstractText = rs.getString("abstract");
@@ -353,7 +354,7 @@ public class PostgressAILoader extends Thread{
 
             System.out.println("All tasks submitted. Main thread exiting.");
         }
-    }
+  //  }
 
 
     public static List<String> listFiles(String dir) {
