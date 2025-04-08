@@ -68,6 +68,8 @@ public class PostgressAILoader extends Thread{
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
                // System.out.println("prompt " + prompt);
 
+                System.out.println("prompt length = " + prompt.length());
+
                 System.out.println("about to run");
             String genes = model.generate(prompt);
             System.out.println("after model run");
