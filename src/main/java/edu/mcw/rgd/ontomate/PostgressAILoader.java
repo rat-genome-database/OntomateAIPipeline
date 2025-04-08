@@ -70,10 +70,14 @@ public class PostgressAILoader extends Thread{
 
                 System.out.println("prompt length = " + prompt.length());
 
+                prompt = "how are you";
+
+
                 System.out.println("about to run");
             String genes = model.generate(prompt);
             System.out.println("after model run");
 
+            System.exit(0);
                 HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
             System.out.println("updating");
                 this.update(pmid,hm);
@@ -319,7 +323,7 @@ public class PostgressAILoader extends Thread{
                 Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 10000 ROWS ONLY");
+                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 15000 ROWS ONLY");
 
                   //ResultSet rs = stmt.executeQuery(
                   //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
