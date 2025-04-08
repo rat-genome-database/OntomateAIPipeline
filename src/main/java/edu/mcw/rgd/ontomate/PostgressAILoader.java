@@ -319,7 +319,7 @@ public class PostgressAILoader extends Thread{
                 Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 15000 ROWS ONLY");
+                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 10000 ROWS ONLY");
 
                   //ResultSet rs = stmt.executeQuery(
                   //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
