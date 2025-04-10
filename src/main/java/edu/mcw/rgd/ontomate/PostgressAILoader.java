@@ -65,7 +65,7 @@ public class PostgressAILoader extends Thread{
                         .modelName("rgdllama3.18b") // Replace with your downloaded model
                         .build();
 
-                String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
+                String prompt = "Extract the <symbol> for any gene discussed in the following abstract. The maximum number of symbols returned should be 100.  If you fine more than 100, please return the first 100 found.  <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
                // System.out.println("prompt " + prompt);
 
                 System.out.println(prompt);
