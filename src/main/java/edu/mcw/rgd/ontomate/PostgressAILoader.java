@@ -62,7 +62,7 @@ public class PostgressAILoader extends Thread{
                         //.modelName("rgdwizard7b") // Replace with your downloaded model
                         //.modelName("rgddeepseek70") // Replace with your downloaded model
                         //.modelName("rgddeepseek32") // Replace with your downloaded model
-                        .modelName("rgdllama3") // Replace with your downloaded model
+                        .modelName("rgdllama3.18b") // Replace with your downloaded model
                         .build();
 
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
