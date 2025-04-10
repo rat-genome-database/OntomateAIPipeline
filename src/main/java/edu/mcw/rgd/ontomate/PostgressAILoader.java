@@ -76,7 +76,7 @@ public class PostgressAILoader extends Thread{
 
                 System.out.println("about to run");
             String genes = model.generate(prompt);
-            System.out.println("after model run");
+            System.out.println(genes);
 
                 HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
             System.out.println("updating");
