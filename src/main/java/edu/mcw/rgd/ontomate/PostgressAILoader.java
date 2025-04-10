@@ -68,7 +68,7 @@ public class PostgressAILoader extends Thread{
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. The maximum number of symbols returned should be 100.  If you fine more than 100, please return the first 100 found.  <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
                // System.out.println("prompt " + prompt);
 
-                System.out.println(prompt);
+                //System.out.println(prompt);
 
 
 
@@ -310,7 +310,7 @@ public class PostgressAILoader extends Thread{
 //        while (true) {
 
             // Create a fixed thread pool with 3 threads
-            ExecutorService executor = Executors.newFixedThreadPool(1);
+            ExecutorService executor = Executors.newFixedThreadPool(3);
 
             pubDate = getDate();
             System.out.println("========== Running for " + pubDate);
