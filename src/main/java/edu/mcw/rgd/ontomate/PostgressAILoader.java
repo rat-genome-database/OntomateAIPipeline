@@ -31,6 +31,8 @@ public class PostgressAILoader extends Thread{
     String abstractText;
     String pmid;
     public static String lud = "2025-02-19";
+    public static String model="";
+    public static int threads = 1;
 
     public PostgressAILoader(String abstractText,String pmid) {
         this.abstractText=abstractText;
@@ -301,6 +303,9 @@ public class PostgressAILoader extends Thread{
 
 
     public static void main(String[] args) throws Exception {
+
+        model=args[0];
+        threads=Integer.parseInt(args[1]);
 
 
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
