@@ -316,7 +316,7 @@ public class PostgressAILoader extends Thread{
         String pubDate = "";
         int count=0;
 
-        while (count < 50000) {
+      //  while (count < 50000) {
 
             System.out.println("++++++++Count+++++++: " + count);
             // Create a fixed thread pool with 3 threads
@@ -369,9 +369,9 @@ public class PostgressAILoader extends Thread{
             }
 
             System.out.println("All tasks submitted. Main thread exiting.");
-            Thread.sleep(60000);
+            //Thread.sleep(60000);
         }
-    }
+  //  }
 
 
     public static List<String> listFiles(String dir) {
