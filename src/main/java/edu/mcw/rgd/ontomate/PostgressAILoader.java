@@ -320,7 +320,7 @@ public class PostgressAILoader extends Thread{
 
             System.out.println("++++++++Count+++++++: " + count);
             // Create a fixed thread pool with 3 threads
-            ExecutorService executor = Executors.newFixedThreadPool(threads);
+         //   ExecutorService executor = Executors.newFixedThreadPool(threads);
 
             pubDate = getDate();
             System.out.println("========== Running for " + pubDate);
@@ -345,26 +345,26 @@ public class PostgressAILoader extends Thread{
                     PostgressAILoader pmb = new PostgressAILoader(abstractText, pmid);
 
                     // Submit the task to the ExecutorService instead of calling pmb.run() directly
-                    executor.submit(() -> {
+                  //  executor.submit(() -> {
                         System.out.println("submitting job");
                         pmb.run();
-                    });
+                    //});
                 }
 
             } catch (SQLException e) {
                 e.printStackTrace();
             } finally {
                 // Tell the executor to stop accepting new tasks
-                executor.shutdown();
+               // executor.shutdown();
                 // Optionally, wait for all tasks to finish (or time out)
-                try {
-                    if (!executor.awaitTermination(60, TimeUnit.MINUTES)) {
-                        executor.shutdownNow();
-                    }
-                } catch (InterruptedException e) {
-                    executor.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
+               // try {
+                 //   if (!executor.awaitTermination(60, TimeUnit.MINUTES)) {
+                  //      executor.shutdownNow();
+                  //  }
+               // } catch (InterruptedException e) {
+                  //  executor.shutdownNow();
+                   // Thread.currentThread().interrupt();
+               // }
             }
 
             System.out.println("All tasks submitted. Main thread exiting.");
