@@ -316,7 +316,7 @@ public class PostgressAILoader extends Thread{
         String pubDate = "";
         int count=0;
 
-        while (count < 10000) {
+        while (count < 50000) {
 
             System.out.println("++++++++Count+++++++: " + count);
             // Create a fixed thread pool with 3 threads
@@ -331,7 +331,7 @@ public class PostgressAILoader extends Thread{
                 Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 1000 ROWS ONLY");
+                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 500 ROWS ONLY");
 
                   //ResultSet rs = stmt.executeQuery(
                   //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
