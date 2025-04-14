@@ -311,9 +311,11 @@ public class PostgressAILoader extends Thread{
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
 
         String pubDate = "";
+        int count=0;
 
-//        while (true) {
+        while (count < 10000) {
 
+            System.out.println("++++++++Count+++++++: " + count);
             // Create a fixed thread pool with 3 threads
             ExecutorService executor = Executors.newFixedThreadPool(threads);
 
@@ -335,6 +337,7 @@ public class PostgressAILoader extends Thread{
                     String pmid = rs.getString("pmid");
                     String abstractText = rs.getString("abstract");
 
+                    count++;
                     // Create your PostgressAILoader object
                     PostgressAILoader pmb = new PostgressAILoader(abstractText, pmid);
 
@@ -362,8 +365,9 @@ public class PostgressAILoader extends Thread{
             }
 
             System.out.println("All tasks submitted. Main thread exiting.");
+            Thread.sleep(60000);
         }
-  //  }
+    }
 
 
     public static List<String> listFiles(String dir) {
