@@ -112,7 +112,10 @@ public class PostgressAILoader extends Thread{
 
 
 
-            if(isEmpty(currentValue)) {
+            if(isEmpty(currentValue) || currentValue.length() > 40) {
+                if (currentValue.length() > 0 ) {
+                    System.out.println("thorwing away " + currentValue);
+                }
                 continue;
             }
 
