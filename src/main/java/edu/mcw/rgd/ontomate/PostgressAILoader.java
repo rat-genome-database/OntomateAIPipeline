@@ -33,6 +33,7 @@ public class PostgressAILoader extends Thread{
     public static String lud = "2025-02-19";
     public static String aiModel="";
     public static int threads = 1;
+    public static String pubYear = "";
 
     public PostgressAILoader(String abstractText,String pmid) {
         this.abstractText=abstractText;
@@ -71,7 +72,6 @@ public class PostgressAILoader extends Thread{
                // System.out.println("prompt " + prompt);
 
                // System.out.println(prompt);
-
 
 
                 System.out.println("about to run");
@@ -309,7 +309,7 @@ public class PostgressAILoader extends Thread{
 
         aiModel=args[0];
         threads=Integer.parseInt(args[1]);
-
+        pubYear = args[2];
 
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
 
@@ -331,7 +331,8 @@ public class PostgressAILoader extends Thread{
                 Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
                  Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 500 ROWS ONLY");
+                         //"SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 500 ROWS ONLY");
+                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and p_year = " + pubYear);
 
                   //ResultSet rs = stmt.executeQuery(
                   //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
