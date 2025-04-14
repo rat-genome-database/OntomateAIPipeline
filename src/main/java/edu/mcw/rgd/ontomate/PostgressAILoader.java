@@ -128,7 +128,7 @@ public class PostgressAILoader extends Thread{
             while (index != -1) {
                 posString=posString + "|" + "1;" + index + "-" + (index + currentValue.length());
                 // Move 1 character ahead to find subsequent (possibly overlapping) occurrences
-                index = abstractText.indexOf(currentValue, index + 1);
+                index = abstractText.indexOf(currentValue, index + threads);
                 count++;
 
                 if (count == 100) {
