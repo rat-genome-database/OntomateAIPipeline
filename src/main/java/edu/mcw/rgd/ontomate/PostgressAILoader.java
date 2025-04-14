@@ -31,7 +31,7 @@ public class PostgressAILoader extends Thread{
     String abstractText;
     String pmid;
     public static String lud = "2025-02-19";
-    public static String model="";
+    public static String aiModel="";
     public static int threads = 1;
 
     public PostgressAILoader(String abstractText,String pmid) {
@@ -64,13 +64,13 @@ public class PostgressAILoader extends Thread{
                         //.modelName("rgdwizard7b") // Replace with your downloaded model
                         //.modelName("rgddeepseek70") // Replace with your downloaded model
                         //.modelName("rgddeepseek32") // Replace with your downloaded model
-                        .modelName("rgdllama3.18b") // Replace with your downloaded model
+                        .modelName(aiModel) // Replace with your downloaded model
                         .build();
 
                 String prompt = "Extract the <symbol> for any gene discussed in the following abstract. The maximum number of symbols returned should be 100.  If you fine more than 100, please return the first 100 found.  <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
                // System.out.println("prompt " + prompt);
 
-                System.out.println(prompt);
+               // System.out.println(prompt);
 
 
 
@@ -304,7 +304,7 @@ public class PostgressAILoader extends Thread{
 
     public static void main(String[] args) throws Exception {
 
-        model=args[0];
+        aiModel=args[0];
         threads=Integer.parseInt(args[1]);
 
 
