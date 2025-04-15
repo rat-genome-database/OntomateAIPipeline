@@ -30,7 +30,7 @@ public class PostgressAILoader extends Thread{
     public static AtomicInteger totalProcessed=new AtomicInteger(0);
     String abstractText;
     String pmid;
-    public static String lud = "2025-02-19";
+    public static String lud = "2025-04-15";
     public static String aiModel="";
     public static int threads = 1;
     public static String pubYear = "";
@@ -75,6 +75,7 @@ public class PostgressAILoader extends Thread{
 
 
                 System.out.println("about to run");
+
             String genes = model.generate(prompt);
             System.out.println(genes);
 
