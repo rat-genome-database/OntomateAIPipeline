@@ -15,5 +15,5 @@ ARGS="${@:-rgdLLama70 3 2025}"
 
 java -Dspring.config=$APPDIR/../properties/default_db2.xml \
     -Dlog4j.configurationFile=file://$APPDIR/properties/log4j2.xml \
-    -cp "lib/$APPNAME.jar:lib/lib/*" \
+    -cp "lib/*" \
     edu.mcw.rgd.ontomate.PostgressAILoader $ARGS 2>&1
