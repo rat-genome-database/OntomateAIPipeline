@@ -1,0 +1,24 @@
+# Build outputs
+build/
+*.class
+
+# IDE
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+
+# OS
+.DS_Store
+
+# Extracted JAR contents
+META-INF/MANIFEST.MF
+
+# Test/working directories
+working/
+
+# Properties with sensitive data (keep external)
+**/default_db*.xml
+*password*
+*credentials*
