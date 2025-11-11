@@ -25,70 +25,257 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class PostgressAILoader extends Thread{
+public class PostgressAILoader implements Runnable {
 
-    public static AtomicInteger totalProcessed=new AtomicInteger(0);
-    String abstractText;
-    String pmid;
-    public static String lud = "2025-04-15";
-    public static String aiModel="";
+    public static AtomicInteger totalProcessed = new AtomicInteger(0);
+    public static AtomicInteger totalSuccess = new AtomicInteger(0);
+    public static AtomicInteger totalFailures = new AtomicInteger(0);
+
+    private String abstractText;
+    private String pmid;
+
+    public static String lud = ConfigManager.getLastUpdateDate();
+    public static String aiModel = "";
     public static int threads = 1;
     public static String pubYear = "";
+    public static String pmidFilter = null;  // Optional: process single PMID
 
-    public PostgressAILoader(String abstractText,String pmid) {
-        this.abstractText=abstractText;
-        this.pmid=pmid;
+    // Reusable AI model instance (thread-safe)
+    private static volatile OllamaChatModel sharedModel = null;
+    private static final Object modelLock = new Object();
+
+    public PostgressAILoader(String abstractText, String pmid) {
+        this.abstractText = abstractText;
+        this.pmid = pmid;
+    }
+
+    /**
+     * Get or create the shared OllamaChatModel instance (thread-safe singleton)
+     */
+    private static OllamaChatModel getModel() {
+        if (sharedModel == null) {
+            synchronized (modelLock) {
+                if (sharedModel == null) {
+                    sharedModel = OllamaChatModel.builder()
+                            .baseUrl(ConfigManager.getOllamaBaseUrl())
+                            .modelName(aiModel)
+                            .build();
+                    System.out.println("Created shared OllamaChatModel: " + aiModel);
+                }
+            }
+        }
+        return sharedModel;
     }
 
     public void run() {
+        int processed = totalProcessed.incrementAndGet();
 
         try {
-            System.out.println("top of run");
-            if (abstractText == null || abstractText.equals("")) {
-                this.updateLastUpdate(pmid);
+            // Log progress every 10 records
+            if (processed % 10 == 0) {
+                System.out.println(String.format("Progress: %d processed, %d success, %d failures",
+                        processed, totalSuccess.get(), totalFailures.get()));
             }
 
-            ArrayList<String> it = new ArrayList<String>();
+            // Handle empty abstracts
+            if (abstractText == null || abstractText.trim().isEmpty()) {
+                this.updateLastUpdate(pmid);
+                totalSuccess.incrementAndGet();
+                return;
+            }
 
-                totalProcessed.getAndIncrement();
+            // Use shared model instance
+            OllamaChatModel model = getModel();
 
-                //if ((totalProcessed.get() % 100) == 0) {
-                    System.out.println(totalProcessed.get());
-                //}
+            // Generate prompt - LLM extracts both genes and diseases
+            String prompt = """
+                Extract all genes and diseases discussed in the following abstract.
 
-            System.out.println("getting model");
-            OllamaChatModel model = OllamaChatModel.builder()
-                        //.baseUrl("http://localhost:11434") // Ollama's default port
-                        .baseUrl("http://grudge.rgd.mcw.edu:11434") // Ollama's default port
-                        //.modelName("curatorModel") // Replace with your downloaded model
-                        //.modelName("rgdLLama70") // Replace with your downloaded model
-                        //.modelName("rgdwizard7b") // Replace with your downloaded model
-                        //.modelName("rgddeepseek70") // Replace with your downloaded model
-                        //.modelName("rgddeepseek32") // Replace with your downloaded model
-                        .modelName(aiModel) // Replace with your downloaded model
-                        .build();
+                GENE EXTRACTION RULES:
+                - Convert gene names to their official symbols (e.g., "tumor protein p53" → TP53)
+                - Include genes mentioned by symbol (e.g., "TP53" → TP53)
+                - Include genes mentioned by name only (e.g., "amyloid precursor protein" → APP)
+                - Preserve species-appropriate capitalization (Human: TP53, Mouse/Rat: Tp53, Zebrafish: tp53)
+                - Each symbol should appear only once (remove duplicates)
+                - Maximum 100 symbols
 
-                String prompt = "Extract the <symbol> for any gene discussed in the following abstract. The maximum number of symbols returned should be 100.  If you fine more than 100, please return the first 100 found.  <abstract>" + abstractText + "</abstract> respond with a pipe delimited list of <symbol> and no other output";
-               // System.out.println("prompt " + prompt);
+                DISEASE EXTRACTION RULES:
+                - Extract disease names as they appear (e.g., "Alzheimer's disease", "diabetes mellitus")
+                - Include diseases mentioned by common names
+                - Normalize to standard disease names when possible
+                - Each disease should appear only once (remove duplicates)
+                - Maximum 100 diseases
 
-               // System.out.println(prompt);
+                EXCLUDE:
+                - Proteins/enzymes that are not genes
+                - Common words, species names
+                - Symptoms that are not diseases
 
+                OUTPUT FORMAT (two lines):
+                GENES: gene1|gene2|gene3
+                DISEASES: disease1|disease2|disease3
 
-                System.out.println("about to run");
+                EXAMPLES:
+                Abstract: "TP53 mutations are associated with cancer and Alzheimer's disease."
+                GENES: TP53
+                DISEASES: cancer|Alzheimer's disease
 
-            String genes = model.generate(prompt);
-            System.out.println(genes);
+                Abstract: "Diabetes mellitus affects insulin production by pancreatic beta cells."
+                GENES:
+                DISEASES: diabetes mellitus
 
-                HashMap<String,String> hm = this.getPositionInfo(genes,abstractText);
-            System.out.println("updating");
-                this.update(pmid,hm);
-            System.out.println("updated");
+                Abstract: "Expression of Tp53 and Apoe in models of Parkinson disease and hypertension."
+                GENES: Tp53|Apoe
+                DISEASES: Parkinson disease|hypertension
 
-        }catch(Exception e) {
+                ABSTRACT:
+                %s
+
+                OUTPUT:
+                """.formatted(abstractText);
+
+            // Call AI model
+            String response = model.generate(prompt);
+
+            // Parse response to separate genes and diseases
+            ExtractionResult result = parseExtractionResult(response, abstractText);
+
+            // Update database with both genes and diseases
+            this.update(pmid, result);
+
+            totalSuccess.incrementAndGet();
+
+        } catch (Exception e) {
+            totalFailures.incrementAndGet();
+            System.err.println("ERROR processing PMID " + pmid + ": " + e.getMessage());
             e.printStackTrace();
+
+            // Try to update with empty data to mark as processed
+            try {
+                this.updateLastUpdate(pmid);
+            } catch (Exception ex) {
+                System.err.println("FATAL: Failed to update last_update_date for PMID " + pmid + ": " + ex.getMessage());
+            }
         }
     }
 
+    /**
+     * Parse the LLM response to extract genes and diseases separately
+     */
+    private ExtractionResult parseExtractionResult(String response, String abstractText) {
+        String genes = "";
+        String diseases = "";
+
+        // Parse the response - expecting format:
+        // GENES: gene1|gene2
+        // DISEASES: disease1|disease2
+        String[] lines = response.split("\n");
+        for (String line : lines) {
+            line = line.trim();
+            if (line.toUpperCase().startsWith("GENES:")) {
+                genes = line.substring(6).trim();
+            } else if (line.toUpperCase().startsWith("DISEASES:")) {
+                diseases = line.substring(9).trim();
+            }
+        }
+
+        // Get position info for genes
+        HashMap<String, String> geneInfo = getPositionInfo(genes, abstractText);
+
+        // Get position and ID info for diseases
+        HashMap<String, String> diseaseInfo = getDiseasePositionInfo(diseases, abstractText);
+
+        return new ExtractionResult(geneInfo, diseaseInfo);
+    }
+
+    /**
+     * Find positions of disease terms in the abstract text and lookup RDO IDs
+     */
+    private HashMap<String, String> getDiseasePositionInfo(String textList, String abstractText) {
+        HashMap<String, String> hm = new HashMap<>();
+
+        if (isEmpty(textList)) {
+            hm.put("positions", "");
+            hm.put("counts", "");
+            hm.put("terms", "");
+            hm.put("ids", "");
+            return hm;
+        }
+
+        String[] diseases = textList.split("\\|");
+        String posString = "";
+        String countString = "";
+        String diseaseString = "";
+        String idString = "";
+
+        for (int i = 0; i < diseases.length; i++) {
+            String currentDisease = diseases[i].trim();
+
+            if (isEmpty(currentDisease) || currentDisease.length() > 100) {
+                if (currentDisease.length() > 0) {
+                    System.out.println("WARNING: Discarding invalid disease term (too long): " + currentDisease);
+                }
+                continue;
+            }
+
+            // Find positions in text
+            int count = 0;
+            int index = abstractText.indexOf(currentDisease);
+
+            if (index == -1) {
+                // Disease term not found literally in text (likely normalized)
+                posString += "|0;0-0";
+            }
+
+            while (index != -1) {
+                posString = posString + "|" + "1;" + index + "-" + (index + currentDisease.length());
+                index = abstractText.indexOf(currentDisease, index + 1);
+                count++;
+
+                if (count == 100) {
+                    System.out.println("WARNING: Found 100 occurrences (max limit) for disease: " + currentDisease);
+                    break;
+                }
+            }
+
+            // Lookup RDO ID using Elasticsearch
+            String rdoId = "";
+            try {
+                rdoId = getAcc(currentDisease, "DO");
+                System.out.println("Disease: " + currentDisease + " → RDO ID: " + rdoId);
+            } catch (IOException e) {
+                System.err.println("WARNING: Could not lookup RDO ID for: " + currentDisease + " - " + e.getMessage());
+                rdoId = ""; // Empty if lookup fails
+            }
+
+            countString += " | " + count;
+            diseaseString += " | " + currentDisease;
+            idString += " | " + rdoId;
+        }
+
+        // Build result map
+        if (!posString.isEmpty()) {
+            hm.put("positions", posString.substring(1));
+            hm.put("counts", countString.substring(3));
+            hm.put("terms", diseaseString.substring(3));
+            hm.put("ids", idString.substring(3));
+        } else {
+            hm.put("positions", "");
+            hm.put("counts", "");
+            hm.put("terms", "");
+            hm.put("ids", "");
+        }
+
+        return hm;
+    }
+
+    /**
+     * Find positions of gene symbols in the abstract text.
+     *
+     * Note: gene_count=0 is expected when the LLM normalized a gene name to its symbol
+     * (e.g., "tumor protein p53" → TP53). In these cases, the gene was discussed but
+     * the symbol doesn't appear literally in the text.
+     */
     private HashMap<String,String> getPositionInfo(String textList,String abstractText) {
 
         HashMap<String, String> hm = new HashMap<String,String>();
@@ -111,11 +298,9 @@ public class PostgressAILoader extends Thread{
         for (int i=0; i< val.length;i++) {
             String currentValue=val[i].trim();
 
-
-
             if(isEmpty(currentValue) || currentValue.length() > 40) {
                 if (currentValue.length() > 0 ) {
-                    System.out.println("thorwing away " + currentValue);
+                    System.out.println("WARNING: Discarding invalid gene symbol (too long): " + currentValue);
                 }
                 continue;
             }
@@ -123,7 +308,7 @@ public class PostgressAILoader extends Thread{
             count=0;
             int index = abstractText.indexOf(currentValue);
 
-
+            // Symbol not found literally in text (likely normalized from gene name)
             if (index == -1) {
                 posString+= "|0;0-0";
             }
@@ -132,12 +317,11 @@ public class PostgressAILoader extends Thread{
             while (index != -1) {
                 posString=posString + "|" + "1;" + index + "-" + (index + currentValue.length());
                 // Move 1 character ahead to find subsequent (possibly overlapping) occurrences
-                index = abstractText.indexOf(currentValue, index + threads);
+                index = abstractText.indexOf(currentValue, index + 1);
                 count++;
 
                 if (count == 100) {
-                    System.out.println("count was 50 " + posString);
-                    System.out.println(abstractText);
+                    System.out.println("WARNING: Found 100 occurrences (max limit) for gene symbol: " + currentValue);
                     break;
                 }
             }
@@ -166,30 +350,48 @@ public class PostgressAILoader extends Thread{
     }
 
     public void updateLastUpdate(String pmid) throws Exception {
-        HashMap<String, String> hm = new HashMap<String,String>();
-            hm.put("positions","");
-            hm.put("counts","");
-            hm.put("terms","");
+        HashMap<String, String> emptyGeneInfo = new HashMap<>();
+        emptyGeneInfo.put("positions", "");
+        emptyGeneInfo.put("counts", "");
+        emptyGeneInfo.put("terms", "");
 
-        this.update(pmid,hm);
+        HashMap<String, String> emptyDiseaseInfo = new HashMap<>();
+        emptyDiseaseInfo.put("positions", "");
+        emptyDiseaseInfo.put("counts", "");
+        emptyDiseaseInfo.put("terms", "");
+        emptyDiseaseInfo.put("ids", "");
+
+        ExtractionResult emptyResult = new ExtractionResult(emptyGeneInfo, emptyDiseaseInfo);
+        this.update(pmid, emptyResult);
     }
-    public void update(String pmid,HashMap<String,String> hm) throws Exception {
 
-        Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+    public void update(String pmid, ExtractionResult result) throws Exception {
+        String query = "UPDATE SOLR_DOCS SET " +
+                "gene_count=?, gene=?, gene_pos=?, " +
+                "rdo_count=?, rdo_term=?, rdo_pos=?, rdo_id=?, " +
+                "last_update_date=? " +
+                "WHERE pmid=?";
 
-        String query = "update SOLR_DOCS set gene_count=?, gene=?, gene_pos=?, last_update_date=? where pmid=?";
+        try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+             PreparedStatement s = conn.prepareStatement(query)) {
 
-        PreparedStatement s = conn.prepareStatement(query);
+            // Set gene fields
+            s.setString(1, result.geneInfo.get("counts"));
+            s.setString(2, result.geneInfo.get("terms"));
+            s.setString(3, result.geneInfo.get("positions"));
 
-        s.setString(1,hm.get("counts"));
-        s.setString(2,hm.get("terms"));
-        s.setString(3,hm.get("positions"));
-        s.setDate(4,new java.sql.Date(new Date().getTime()));
-        s.setString(5,pmid);
+            // Set disease (RDO) fields
+            s.setString(4, result.diseaseInfo.get("counts"));
+            s.setString(5, result.diseaseInfo.get("terms"));
+            s.setString(6, result.diseaseInfo.get("positions"));
+            s.setString(7, result.diseaseInfo.get("ids"));
 
-        s.executeUpdate();
+            // Set timestamp and identifier
+            s.setDate(8, new java.sql.Date(new Date().getTime()));
+            s.setString(9, pmid);
 
-        conn.close();
+            s.executeUpdate();
+        }
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -209,7 +411,9 @@ public class PostgressAILoader extends Thread{
 
         // Create the low-level REST client
         try (RestClient restClient = RestClient.builder(
-                new HttpHost("travis.rgd.mcw.edu", 9200, "http")
+                new HttpHost(ConfigManager.getElasticsearchHost(),
+                           ConfigManager.getElasticsearchPort(),
+                           ConfigManager.getElasticsearchProtocol())
         ).build()) {
 
             String searchTerm = term.trim().toLowerCase();
@@ -239,7 +443,7 @@ public class PostgressAILoader extends Thread{
 
             // Create a Request object
             // Use the POST method on [index]/_search
-            Request request = new Request("POST", "/aimappings_index_dev/_search");
+            Request request = new Request("POST", "/" + ConfigManager.getElasticsearchIndex() + "/_search");
             request.setJsonEntity(requestBody);
 
             // Perform the request
@@ -308,71 +512,155 @@ public class PostgressAILoader extends Thread{
 
     public static void main(String[] args) throws Exception {
 
-        aiModel=args[0];
-        threads=Integer.parseInt(args[1]);
-        pubYear = args[2];
+        aiModel = args.length > 0 ? args[0] : ConfigManager.getDefaultAiModel();
+        threads = args.length > 1 ? Integer.parseInt(args[1]) : ConfigManager.getDefaultThreads();
+        pubYear = args.length > 2 ? args[2] : ConfigManager.getDefaultYear();
+        pmidFilter = args.length > 3 ? args[3] : null;  // Optional PMID filter
 
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
+        System.out.println("\n========================================");
+        System.out.println("OntomateAIPipeline Starting");
+        System.out.println("========================================");
+        System.out.println("AI Model: " + aiModel);
+        System.out.println("Threads: " + threads);
+        if (pmidFilter != null) {
+            System.out.println("Processing Single PMID: " + pmidFilter);
+        } else {
+            System.out.println("Publication Year: " + pubYear);
+            System.out.println("Last Update Date Filter: " + lud);
+        }
+        System.out.println("Started at: " + sdf.format(new Date()));
+        System.out.println("========================================\n");
 
-        String pubDate = "";
-        int count=0;
+        // Create a fixed thread pool
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
 
-      //  while (count < 50000) {
+        try {
+            int totalSubmitted = 0;
 
-            System.out.println("++++++++Count+++++++: " + count);
-            // Create a fixed thread pool with 3 threads
-         //   ExecutorService executor = Executors.newFixedThreadPool(threads);
+            // Single PMID mode: process just one record
+            if (pmidFilter != null) {
+                try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+                     Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery(
+                             "SELECT pmid, abstract FROM solr_docs WHERE pmid = '" + pmidFilter + "'")) {
 
-            pubDate = getDate();
-            System.out.println("========== Running for " + pubDate);
-
-            // Use try-with-resources to ensure the Connection, Statement, and ResultSet are closed automatically
-            try {
-
-                Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
-                 Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery(
-                         //"SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and (p_date = DATE '" + pubDate + "') FETCH FIRST 500 ROWS ONLY");
-                         "SELECT * FROM solr_docs WHERE last_update_date < DATE '" + PostgressAILoader.lud + "' and p_year = " + pubYear);
-
-                  //ResultSet rs = stmt.executeQuery(
-                  //        "SELECT * FROM solr_docs WHERE pmid='38309493'")) {
-
-                while (rs.next()) {
-                    String pmid = rs.getString("pmid");
-                    String abstractText = rs.getString("abstract");
-
-                    count++;
-                    // Create your PostgressAILoader object
-                    PostgressAILoader pmb = new PostgressAILoader(abstractText, pmid);
-
-                    // Submit the task to the ExecutorService instead of calling pmb.run() directly
-                  //  executor.submit(() -> {
-                        System.out.println("submitting job");
-                        pmb.run();
-                    //});
+                    if (rs.next()) {
+                        String pmid = rs.getString("pmid");
+                        String abstractText = rs.getString("abstract");
+                        executor.submit(new PostgressAILoader(abstractText, pmid));
+                        totalSubmitted++;
+                        System.out.println("Submitted PMID: " + pmid);
+                    } else {
+                        System.err.println("ERROR: PMID " + pmidFilter + " not found in database");
+                    }
+                } catch (SQLException e) {
+                    System.err.println("ERROR loading PMID " + pmidFilter + ": " + e.getMessage());
+                    e.printStackTrace();
                 }
+            }
+            // Batch mode: process by year
+            else {
+                int batchSize = 100;
+                boolean hasMoreRecords = true;
 
-            } catch (SQLException e) {
-                e.printStackTrace();
-            } finally {
-                // Tell the executor to stop accepting new tasks
-               // executor.shutdown();
-                // Optionally, wait for all tasks to finish (or time out)
-               // try {
-                 //   if (!executor.awaitTermination(60, TimeUnit.MINUTES)) {
-                  //      executor.shutdownNow();
-                  //  }
-               // } catch (InterruptedException e) {
-                  //  executor.shutdownNow();
-                   // Thread.currentThread().interrupt();
-               // }
+                while (hasMoreRecords) {
+                    List<AbstractRecord> batch = new ArrayList<>();
+
+                    // Load batch of records
+                    try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+                         Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery(
+                                 "SELECT pmid, abstract FROM solr_docs " +
+                                 "WHERE (last_update_date < DATE '" + lud + "' OR last_update_date IS NULL) " +
+                                 "AND p_year = " + pubYear + " " +
+                                 "FETCH FIRST " + batchSize + " ROWS ONLY")) {
+
+                        while (rs.next()) {
+                            batch.add(new AbstractRecord(rs.getString("pmid"), rs.getString("abstract")));
+                        }
+                    } catch (SQLException e) {
+                        System.err.println("ERROR loading batch: " + e.getMessage());
+                        e.printStackTrace();
+                        break;
+                    }
+
+                    if (batch.isEmpty()) {
+                        hasMoreRecords = false;
+                        break;
+                    }
+
+                    // Submit batch to executor
+                    for (AbstractRecord record : batch) {
+                        executor.submit(new PostgressAILoader(record.abstractText, record.pmid));
+                        totalSubmitted++;
+                    }
+
+                    System.out.println("Submitted batch of " + batch.size() + " records (Total: " + totalSubmitted + ")");
+
+                    // If batch is smaller than batchSize, we've reached the end
+                    if (batch.size() < batchSize) {
+                        hasMoreRecords = false;
+                    }
+                }
             }
 
-            System.out.println("All tasks submitted. Main thread exiting.");
-            //Thread.sleep(60000);
+            System.out.println("\nAll " + totalSubmitted + " tasks submitted. Waiting for completion...");
+
+        } finally {
+            // Shutdown executor and wait for tasks to complete
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(120, TimeUnit.MINUTES)) {
+                    System.err.println("WARNING: Tasks did not complete within timeout. Forcing shutdown...");
+                    executor.shutdownNow();
+                    if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                        System.err.println("ERROR: Executor did not terminate");
+                    }
+                }
+            } catch (InterruptedException e) {
+                System.err.println("Main thread interrupted. Forcing shutdown...");
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+
+            // Print final statistics
+            System.out.println("\n========================================");
+            System.out.println("Processing Complete");
+            System.out.println("========================================");
+            System.out.println("Total Processed: " + totalProcessed.get());
+            System.out.println("Successful: " + totalSuccess.get());
+            System.out.println("Failures: " + totalFailures.get());
+            System.out.println("Finished at: " + sdf.format(new Date()));
+            System.out.println("========================================\n");
         }
-  //  }
+    }
+
+    /**
+     * Simple record class to hold abstract data
+     */
+    private static class AbstractRecord {
+        String pmid;
+        String abstractText;
+
+        AbstractRecord(String pmid, String abstractText) {
+            this.pmid = pmid;
+            this.abstractText = abstractText;
+        }
+    }
+
+    /**
+     * Data structure to hold extraction results for both genes and diseases
+     */
+    private static class ExtractionResult {
+        HashMap<String, String> geneInfo;
+        HashMap<String, String> diseaseInfo;
+
+        ExtractionResult(HashMap<String, String> geneInfo, HashMap<String, String> diseaseInfo) {
+            this.geneInfo = geneInfo;
+            this.diseaseInfo = diseaseInfo;
+        }
+    }
 
 
     public static List<String> listFiles(String dir) {

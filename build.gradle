@@ -86,14 +86,14 @@ jar {
         attributes 'Built-By': System.getProperty('user.name'),
                 'Built-Date': new Date(),
                 'Built-JDK': System.getProperty('java.version'),
-                'Class-Path': configurations.runtimeClasspath.collect { it.getName() }.join(' '),
                 'Main-Class': mainClassName
-
     }
-//    from{
-//        configurations.compile.collect{it.isDirectory()?it:zipTree(it)}
-//    }
+}
 
+// Task to copy dependencies to lib folder
+task copyDependencies(type: Copy) {
+    from configurations.runtimeClasspath
+    into 'build/libs/lib'
 }
 
 distributions {
