@@ -563,6 +563,8 @@ public class PostgressAILoader implements Runnable {
             else {
                 int batchSize = 100;
                 boolean hasMoreRecords = true;
+                Set<String> submittedPmids = new HashSet<>();
+                int lastProgressCount = 0;
 
                 while (hasMoreRecords) {
                     List<AbstractRecord> batch = new ArrayList<>();
@@ -574,10 +576,16 @@ public class PostgressAILoader implements Runnable {
                                  "SELECT pmid, abstract FROM solr_docs " +
                                  "WHERE (last_update_date < DATE '" + lud + "' OR last_update_date IS NULL) " +
                                  "AND p_year = " + pubYear + " " +
+                                 "ORDER BY pmid " +
                                  "FETCH FIRST " + batchSize + " ROWS ONLY")) {
 
                         while (rs.next()) {
-                            batch.add(new AbstractRecord(rs.getString("pmid"), rs.getString("abstract")));
+                            String pmid = rs.getString("pmid");
+                            // Skip if already submitted
+                            if (!submittedPmids.contains(pmid)) {
+                                batch.add(new AbstractRecord(pmid, rs.getString("abstract")));
+                                submittedPmids.add(pmid);
+                            }
                         }
                     } catch (SQLException e) {
                         System.err.println("ERROR loading batch: " + e.getMessage());
@@ -586,8 +594,26 @@ public class PostgressAILoader implements Runnable {
                     }
 
                     if (batch.isEmpty()) {
-                        hasMoreRecords = false;
-                        break;
+                        // Wait for workers to finish processing and update database
+                        System.out.println("No new records found. Waiting 5 seconds for workers to update database...");
+                        try {
+                            Thread.sleep(5000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+
+                        // Check if workers made progress
+                        int currentSuccess = totalSuccess.get();
+                        if (currentSuccess > lastProgressCount) {
+                            lastProgressCount = currentSuccess;
+                            // Workers made progress, try fetching again
+                            continue;
+                        } else {
+                            // No progress, we're done
+                            hasMoreRecords = false;
+                            break;
+                        }
                     }
 
                     // Submit batch to executor
@@ -596,11 +622,20 @@ public class PostgressAILoader implements Runnable {
                         totalSubmitted++;
                     }
 
-                    System.out.println("Submitted batch of " + batch.size() + " records (Total: " + totalSubmitted + ")");
+                    System.out.println("Submitted batch of " + batch.size() + " records (Total: " + totalSubmitted + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
 
                     // If batch is smaller than batchSize, we've reached the end
                     if (batch.size() < batchSize) {
                         hasMoreRecords = false;
+                    }
+
+                    // BACKPRESSURE: Wait a bit to let workers process before fetching next batch
+                    // This prevents the queue from growing infinitely
+                    try {
+                        Thread.sleep(1000);  // 1 second delay between batches
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
                     }
                 }
             }
