@@ -532,8 +532,8 @@ public class PostgressAILoader implements Runnable {
         System.out.println("Started at: " + sdf.format(new Date()));
         System.out.println("========================================\n");
 
-        // Create a fixed thread pool
-        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        // Create a fixed thread pool with bounded queue
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(threads);
 
         try {
             int totalSubmitted = 0;
@@ -562,11 +562,28 @@ public class PostgressAILoader implements Runnable {
             // Batch mode: process by year
             else {
                 int batchSize = 500;  // Larger batches for better throughput
+                int maxQueueSize = 2000;  // Maximum tasks in queue before waiting
                 boolean hasMoreRecords = true;
                 int consecutiveEmptyBatches = 0;
                 int maxEmptyRetries = 10;
 
                 while (hasMoreRecords) {
+                    // BACKPRESSURE: Wait if queue is too large
+                    while (executor.getQueue().size() > maxQueueSize) {
+                        int queueSize = executor.getQueue().size();
+                        int activeThreads = executor.getActiveCount();
+                        System.out.println("Queue full (" + queueSize + " tasks). Waiting for workers... (Active: " + activeThreads + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
+                        try {
+                            Thread.sleep(5000);  // Wait 5 seconds for queue to drain
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            hasMoreRecords = false;
+                            break;
+                        }
+                    }
+
+                    if (!hasMoreRecords) break;
+
                     List<AbstractRecord> batch = new ArrayList<>();
 
                     // Load batch of records - trust the database as source of truth
@@ -591,7 +608,8 @@ public class PostgressAILoader implements Runnable {
 
                     if (batch.isEmpty()) {
                         consecutiveEmptyBatches++;
-                        System.out.println("No new records found. Waiting 10 seconds for workers to finish... (attempt " + consecutiveEmptyBatches + "/" + maxEmptyRetries + ")");
+                        int queueSize = executor.getQueue().size();
+                        System.out.println("No new records found. Waiting 10 seconds for workers to finish... (Queue: " + queueSize + ", attempt " + consecutiveEmptyBatches + "/" + maxEmptyRetries + ")");
 
                         if (consecutiveEmptyBatches >= maxEmptyRetries) {
                             System.out.println("No new records after " + maxEmptyRetries + " attempts. Processing complete.");
@@ -617,19 +635,12 @@ public class PostgressAILoader implements Runnable {
                         totalSubmitted++;
                     }
 
-                    System.out.println("Submitted batch of " + batch.size() + " records (Total: " + totalSubmitted + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
+                    int queueSize = executor.getQueue().size();
+                    System.out.println("Submitted batch of " + batch.size() + " records (Total: " + totalSubmitted + ", Queue: " + queueSize + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
 
                     // If batch is smaller than batchSize, we're approaching the end
                     if (batch.size() < batchSize) {
                         System.out.println("Small batch received (" + batch.size() + "), may be near completion.");
-                    }
-
-                    // Small delay to prevent overwhelming the database
-                    try {
-                        Thread.sleep(2000);  // 2 second delay between batches
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
                     }
                 }
             }
