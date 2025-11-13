@@ -375,6 +375,9 @@ public class PostgressAILoader implements Runnable {
         try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
              PreparedStatement s = conn.prepareStatement(query)) {
 
+            // Ensure auto-commit is enabled
+            conn.setAutoCommit(true);
+
             // Set gene fields
             s.setString(1, result.geneInfo.get("counts"));
             s.setString(2, result.geneInfo.get("terms"));
@@ -390,7 +393,11 @@ public class PostgressAILoader implements Runnable {
             s.setDate(8, new java.sql.Date(new Date().getTime()));
             s.setString(9, pmid);
 
-            s.executeUpdate();
+            int rowsUpdated = s.executeUpdate();
+
+            if (rowsUpdated == 0) {
+                System.err.println("WARNING: No rows updated for PMID " + pmid);
+            }
         }
     }
 
