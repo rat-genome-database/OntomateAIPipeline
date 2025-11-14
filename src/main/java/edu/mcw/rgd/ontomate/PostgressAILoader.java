@@ -372,11 +372,16 @@ public class PostgressAILoader implements Runnable {
                 "last_update_date=? " +
                 "WHERE pmid=?";
 
-        try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
-             PreparedStatement s = conn.prepareStatement(query)) {
+        Connection conn = null;
+        PreparedStatement s = null;
 
-            // Ensure auto-commit is enabled
-            conn.setAutoCommit(true);
+        try {
+            conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+
+            // Disable auto-commit so we can control when to commit
+            conn.setAutoCommit(false);
+
+            s = conn.prepareStatement(query);
 
             // Set gene fields
             s.setString(1, result.geneInfo.get("counts"));
@@ -395,8 +400,30 @@ public class PostgressAILoader implements Runnable {
 
             int rowsUpdated = s.executeUpdate();
 
+            // EXPLICITLY COMMIT THE TRANSACTION
+            conn.commit();
+
             if (rowsUpdated == 0) {
                 System.err.println("WARNING: No rows updated for PMID " + pmid);
+            }
+
+        } catch (Exception e) {
+            // Rollback on error
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    System.err.println("ERROR: Failed to rollback transaction for PMID " + pmid);
+                }
+            }
+            throw e;
+        } finally {
+            // Close resources
+            if (s != null) {
+                try { s.close(); } catch (SQLException e) { /* ignore */ }
+            }
+            if (conn != null) {
+                try { conn.close(); } catch (SQLException e) { /* ignore */ }
             }
         }
     }
