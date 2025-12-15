@@ -551,6 +551,11 @@ public class PostgressAILoader implements Runnable {
         pubYear = args.length > 2 ? args[2] : ConfigManager.getDefaultYear();
         pmidFilter = args.length > 3 ? args[3] : null;  // Optional PMID filter
 
+        // Optional: Override last update date filter (args[4])
+        if (args.length > 4 && pmidFilter == null) {
+            lud = args[4];
+        }
+
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
         System.out.println("\n========================================");
         System.out.println("OntomateAIPipeline Starting");
