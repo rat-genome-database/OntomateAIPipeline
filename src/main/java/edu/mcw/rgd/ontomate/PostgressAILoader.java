@@ -549,10 +549,14 @@ public class PostgressAILoader implements Runnable {
         aiModel = args.length > 0 ? args[0] : ConfigManager.getDefaultAiModel();
         threads = args.length > 1 ? Integer.parseInt(args[1]) : ConfigManager.getDefaultThreads();
         pubYear = args.length > 2 ? args[2] : ConfigManager.getDefaultYear();
-        pmidFilter = args.length > 3 ? args[3] : null;  // Optional PMID filter
+
+        // Optional PMID filter - treat empty string as null
+        if (args.length > 3 && args[3] != null && !args[3].trim().isEmpty()) {
+            pmidFilter = args[3];
+        }
 
         // Optional: Override last update date filter (args[4])
-        if (args.length > 4 && pmidFilter == null) {
+        if (args.length > 4 && pmidFilter == null && args[4] != null && !args[4].trim().isEmpty()) {
             lud = args[4];
         }
 
