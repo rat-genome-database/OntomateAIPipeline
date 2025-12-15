@@ -22,21 +22,21 @@ public class ConfigManager {
         if (loaded) return;
 
         try {
-            // Try to load from system property location
-            String configPath = System.getProperty("ontomate.config");
-            if (configPath != null) {
-                try (InputStream input = new FileInputStream(configPath)) {
-                    properties.load(input);
-                    System.out.println("Loaded configuration from: " + configPath);
-                }
-            }
-
-            // Try to load from classpath
+            // Load from classpath first (defaults)
             try (InputStream input = ConfigManager.class.getClassLoader()
                     .getResourceAsStream("ontomate.properties")) {
                 if (input != null) {
                     properties.load(input);
                     System.out.println("Loaded configuration from classpath");
+                }
+            }
+
+            // Then override with system property location (custom config takes precedence)
+            String configPath = System.getProperty("ontomate.config");
+            if (configPath != null) {
+                try (InputStream input = new FileInputStream(configPath)) {
+                    properties.load(input);
+                    System.out.println("Loaded configuration from: " + configPath);
                 }
             }
         } catch (IOException e) {
