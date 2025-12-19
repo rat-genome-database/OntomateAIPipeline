@@ -242,7 +242,7 @@ public class PostgressAILoader implements Runnable {
             String rdoId = "";
             try {
                 rdoId = getAcc(currentDisease, "DO");
-                System.out.println("Disease: " + currentDisease + " → RDO ID: " + rdoId);
+                // Removed verbose logging: Disease lookup successful
             } catch (IOException e) {
                 System.err.println("WARNING: Could not lookup RDO ID for: " + currentDisease + " - " + e.getMessage());
                 rdoId = ""; // Empty if lookup fails
@@ -593,7 +593,7 @@ public class PostgressAILoader implements Runnable {
                         String abstractText = rs.getString("abstract");
                         executor.submit(new PostgressAILoader(abstractText, pmid));
                         totalSubmitted++;
-                        System.out.println("Submitted PMID: " + pmid);
+                        // Removed verbose logging: individual PMID submission
                     } else {
                         System.err.println("ERROR: PMID " + pmidFilter + " not found in database");
                     }
