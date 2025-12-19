@@ -68,6 +68,7 @@ public class PostgressAILoader implements Runnable {
     }
 
     public void run() {
+        long startTime = System.currentTimeMillis();
         int processed = totalProcessed.incrementAndGet();
 
         try {
@@ -88,6 +89,7 @@ public class PostgressAILoader implements Runnable {
             OllamaChatModel model = getModel();
 
             // Generate prompt - LLM extracts both genes and diseases
+            long promptStart = System.currentTimeMillis();
             String prompt = """
                 Extract all genes and diseases discussed in the following abstract.
 
@@ -135,13 +137,27 @@ public class PostgressAILoader implements Runnable {
                 """.formatted(abstractText);
 
             // Call AI model
+            long aiStart = System.currentTimeMillis();
             String response = model.generate(prompt);
+            long aiTime = System.currentTimeMillis() - aiStart;
 
             // Parse response to separate genes and diseases
+            long parseStart = System.currentTimeMillis();
             ExtractionResult result = parseExtractionResult(response, abstractText);
+            long parseTime = System.currentTimeMillis() - parseStart;
 
             // Update database with both genes and diseases
+            long dbStart = System.currentTimeMillis();
             this.update(pmid, result);
+            long dbTime = System.currentTimeMillis() - dbStart;
+
+            long totalTime = System.currentTimeMillis() - startTime;
+
+            // Log timing for every 10th record
+            if (processed % 10 == 0) {
+                System.out.println(String.format("TIMING [PMID %s]: Total=%dms, AI=%dms, Parse=%dms, DB=%dms",
+                        pmid, totalTime, aiTime, parseTime, dbTime));
+            }
 
             totalSuccess.incrementAndGet();
 
@@ -240,11 +256,16 @@ public class PostgressAILoader implements Runnable {
 
             // Lookup RDO ID using Elasticsearch
             String rdoId = "";
+            long esStart = System.currentTimeMillis();
             try {
                 rdoId = getAcc(currentDisease, "DO");
-                // Removed verbose logging: Disease lookup successful
+                long esTime = System.currentTimeMillis() - esStart;
+                if (esTime > 1000) {  // Log if lookup takes more than 1 second
+                    System.out.println("SLOW ES LOOKUP: " + currentDisease + " took " + esTime + "ms");
+                }
             } catch (IOException e) {
-                System.err.println("WARNING: Could not lookup RDO ID for: " + currentDisease + " - " + e.getMessage());
+                long esTime = System.currentTimeMillis() - esStart;
+                System.err.println("WARNING: Could not lookup RDO ID for: " + currentDisease + " - " + e.getMessage() + " (took " + esTime + "ms)");
                 rdoId = ""; // Empty if lookup fails
             }
 
