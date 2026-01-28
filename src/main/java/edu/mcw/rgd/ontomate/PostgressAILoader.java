@@ -39,6 +39,7 @@ public class PostgressAILoader implements Runnable {
     public static int threads = 1;
     public static String pubYear = "";
     public static String pmidFilter = null;  // Optional: process single PMID
+    public static String stopTime = null;    // Optional: stop processing at this time (HHMM military format)
 
     // Reusable AI model instance (thread-safe)
     private static volatile OllamaChatModel sharedModel = null;
@@ -65,6 +66,32 @@ public class PostgressAILoader implements Runnable {
             }
         }
         return sharedModel;
+    }
+
+    /**
+     * Check if we've passed the configured stop time
+     * @return true if stopTime is set and current time >= stopTime
+     */
+    private static boolean shouldStop() {
+        if (stopTime == null || stopTime.isEmpty()) {
+            return false;
+        }
+        try {
+            int stopHour = Integer.parseInt(stopTime.substring(0, 2));
+            int stopMinute = Integer.parseInt(stopTime.substring(2, 4));
+
+            Calendar now = Calendar.getInstance();
+            int currentHour = now.get(Calendar.HOUR_OF_DAY);
+            int currentMinute = now.get(Calendar.MINUTE);
+
+            int currentTimeValue = currentHour * 100 + currentMinute;
+            int stopTimeValue = stopHour * 100 + stopMinute;
+
+            return currentTimeValue >= stopTimeValue;
+        } catch (Exception e) {
+            System.err.println("WARNING: Invalid stop time format: " + stopTime + ". Expected HHMM (e.g., 1730)");
+            return false;
+        }
     }
 
     public void run() {
@@ -581,6 +608,14 @@ public class PostgressAILoader implements Runnable {
             lud = args[4];
         }
 
+        // Optional: Stop time in military format HHMM (args[5])
+        if (args.length > 5 && args[5] != null && !args[5].trim().isEmpty()) {
+            stopTime = args[5].trim();
+            if (stopTime.length() != 4) {
+                System.err.println("WARNING: Stop time should be in HHMM format (e.g., 1730 for 5:30 PM). Got: " + stopTime);
+            }
+        }
+
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd 'at' HH:mm:ss");
         System.out.println("\n========================================");
         System.out.println("OntomateAIPipeline Starting");
@@ -592,6 +627,9 @@ public class PostgressAILoader implements Runnable {
         } else {
             System.out.println("Publication Year: " + pubYear);
             System.out.println("Last Update Date Filter: " + lud);
+        }
+        if (stopTime != null) {
+            System.out.println("Stop Time: " + stopTime.substring(0, 2) + ":" + stopTime.substring(2, 4));
         }
         System.out.println("Started at: " + sdf.format(new Date()));
         System.out.println("========================================\n");
@@ -632,6 +670,13 @@ public class PostgressAILoader implements Runnable {
                 int maxEmptyRetries = 10;
 
                 while (hasMoreRecords) {
+                    // Check if we should stop based on stop time
+                    if (shouldStop()) {
+                        System.out.println("\nStop time reached (" + stopTime.substring(0, 2) + ":" + stopTime.substring(2, 4) + "). Stopping submission of new tasks...");
+                        hasMoreRecords = false;
+                        break;
+                    }
+
                     // BACKPRESSURE: Wait if queue is too large
                     while (executor.getQueue().size() > maxQueueSize) {
                         int queueSize = executor.getQueue().size();
