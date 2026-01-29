@@ -594,6 +594,12 @@ public class PostgressAILoader implements Runnable {
 
     public static void main(String[] args) throws Exception {
 
+        // DEBUG: Print all arguments received
+        System.out.println("DEBUG: Received " + args.length + " arguments:");
+        for (int i = 0; i < args.length; i++) {
+            System.out.println("DEBUG: args[" + i + "] = '" + args[i] + "'");
+        }
+
         aiModel = args.length > 0 ? args[0] : ConfigManager.getDefaultAiModel();
         threads = args.length > 1 ? Integer.parseInt(args[1]) : ConfigManager.getDefaultThreads();
         pubYear = args.length > 2 ? args[2] : ConfigManager.getDefaultYear();
