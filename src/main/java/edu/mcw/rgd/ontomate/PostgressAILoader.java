@@ -68,9 +68,14 @@ public class PostgressAILoader implements Runnable {
         return sharedModel;
     }
 
+    // Track if we've crossed midnight (for overnight runs)
+    private static int startDayOfYear = -1;
+    private static int startTimeValue = -1;
+
     /**
      * Check if we've passed the configured stop time
-     * @return true if stopTime is set and current time >= stopTime
+     * Handles overnight runs: if stop time < start time, assumes stop time is next day
+     * @return true if stopTime is set and we've reached the stop time
      */
     private static boolean shouldStop() {
         if (stopTime == null || stopTime.isEmpty()) {
@@ -79,15 +84,38 @@ public class PostgressAILoader implements Runnable {
         try {
             int stopHour = Integer.parseInt(stopTime.substring(0, 2));
             int stopMinute = Integer.parseInt(stopTime.substring(2, 4));
+            int stopTimeValue = stopHour * 100 + stopMinute;
 
             Calendar now = Calendar.getInstance();
             int currentHour = now.get(Calendar.HOUR_OF_DAY);
             int currentMinute = now.get(Calendar.MINUTE);
-
             int currentTimeValue = currentHour * 100 + currentMinute;
-            int stopTimeValue = stopHour * 100 + stopMinute;
+            int currentDayOfYear = now.get(Calendar.DAY_OF_YEAR);
 
-            return currentTimeValue >= stopTimeValue;
+            // Initialize start time on first call
+            if (startTimeValue == -1) {
+                startTimeValue = currentTimeValue;
+                startDayOfYear = currentDayOfYear;
+            }
+
+            // If stop time is later than start time (same day run)
+            // e.g., start at 10:00, stop at 17:00
+            if (stopTimeValue > startTimeValue) {
+                return currentTimeValue >= stopTimeValue;
+            }
+            // If stop time is earlier than start time (overnight run)
+            // e.g., start at 17:00, stop at 08:00 next day
+            else {
+                // We should stop if:
+                // 1. We've crossed midnight (different day) AND current time >= stop time
+                // 2. OR we're on the same day but current time >= stop time (shouldn't happen for overnight)
+                if (currentDayOfYear != startDayOfYear) {
+                    // We've crossed midnight, now check if we've reached stop time
+                    return currentTimeValue >= stopTimeValue;
+                }
+                // Still same day, keep running
+                return false;
+            }
         } catch (Exception e) {
             System.err.println("WARNING: Invalid stop time format: " + stopTime + ". Expected HHMM (e.g., 1730)");
             return false;
