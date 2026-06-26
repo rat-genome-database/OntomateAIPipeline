@@ -12,6 +12,7 @@ import java.util.Properties;
 public class ConfigManager {
 
     private static Properties properties = new Properties();
+    private static Properties esProperties = new Properties();
     private static boolean loaded = false;
 
     static {
@@ -37,6 +38,16 @@ public class ConfigManager {
                 try (InputStream input = new FileInputStream(configPath)) {
                     properties.load(input);
                     System.out.println("Loaded configuration from: " + configPath);
+                }
+            }
+
+            // Load Elasticsearch credentials from the file pointed to by ELASTICSEARCH_PROPS.
+            // File format (matches our other apps): USERNAME=... / PASSWORD=...
+            String esPath = System.getenv("ELASTICSEARCH_PROPS");
+            if (esPath != null && !esPath.isEmpty()) {
+                try (InputStream input = new FileInputStream(esPath)) {
+                    esProperties.load(input);
+                    System.out.println("Loaded Elasticsearch credentials from: " + esPath);
                 }
             }
         } catch (IOException e) {
@@ -86,6 +97,16 @@ public class ConfigManager {
 
     public static String getElasticsearchIndex() {
         return getProperty("elasticsearch.index", "aimappings_index_dev");
+    }
+
+    public static String getElasticsearchUsername() {
+        String v = esProperties.getProperty("USERNAME");
+        return v == null || v.isEmpty() ? null : v;
+    }
+
+    public static String getElasticsearchPassword() {
+        String v = esProperties.getProperty("PASSWORD");
+        return v == null || v.isEmpty() ? null : v;
     }
 
     // Default runtime configuration

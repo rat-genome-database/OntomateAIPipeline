@@ -6,10 +6,14 @@ import dev.langchain4j.model.ollama.OllamaChatModel;
 import edu.mcw.rgd.dao.DataSourceFactory;
 import edu.mcw.rgd.dao.impl.solr.SolrDocsDAO;
 import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.util.EntityUtils;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestClientBuilder;
 
 import javax.sql.DataSource;
 import java.io.File;
@@ -520,11 +524,20 @@ public class PostgressAILoader implements Runnable {
         }
 
         // Create the low-level REST client
-        try (RestClient restClient = RestClient.builder(
+        RestClientBuilder builder = RestClient.builder(
                 new HttpHost(ConfigManager.getElasticsearchHost(),
                            ConfigManager.getElasticsearchPort(),
-                           ConfigManager.getElasticsearchProtocol())
-        ).build()) {
+                           ConfigManager.getElasticsearchProtocol()));
+
+        String esUser = ConfigManager.getElasticsearchUsername();
+        String esPass = ConfigManager.getElasticsearchPassword();
+        if (esUser != null && esPass != null) {
+            BasicCredentialsProvider creds = new BasicCredentialsProvider();
+            creds.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(esUser, esPass));
+            builder.setHttpClientConfigCallback(hc -> hc.setDefaultCredentialsProvider(creds));
+        }
+
+        try (RestClient restClient = builder.build()) {
 
             String searchTerm = term.trim().toLowerCase();
             String ontology = ont.toUpperCase();
