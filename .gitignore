@@ -22,3 +22,6 @@ working/
 **/default_db*.xml
 *password*
 *credentials*
+
+# Documentation and notes stay local
+*.md

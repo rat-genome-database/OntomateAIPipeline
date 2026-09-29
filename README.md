@@ -1,2 +1,0 @@
-# OntomateAIPipeline
-Ontomate AI Pipeline
