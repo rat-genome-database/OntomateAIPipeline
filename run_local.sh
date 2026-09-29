@@ -21,12 +21,14 @@ fi
 
 # Run the application
 # Extracts: Gene symbols + Disease terms (with RDO IDs)
-# Arguments: aiModel threads pubYear [pmid]
+# Arguments: aiModel threads pubYear [pmid] [lastUpdateDate] [stopTime]
+#   pubYear: a single year (2025), a range walked newest first (2023-2015), or "all"
 # Default: rgdLLama70 3 2025
 # Examples:
 #   ./run_local.sh                           # Use defaults
 #   ./run_local.sh rgdLLama70 5 2024         # Process year 2024 with 5 threads
 #   ./run_local.sh rgdLLama70 1 2025 12345678 # Process single PMID 12345678
+#   ./run_local.sh rgdLLama70 6 2023-2015    # Walk 2023 down to 2015 without restarting
 echo "Starting gene and disease extraction..."
 
 # Use provided arguments or defaults

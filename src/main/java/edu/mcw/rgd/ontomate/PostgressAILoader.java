@@ -633,6 +633,140 @@ public class PostgressAILoader implements Runnable {
     }
 
 
+    // Set when the stop time is reached or the main thread is interrupted, so the year
+    // loop stops submitting further years.
+    private static volatile boolean submissionStopped = false;
+
+    /**
+     * Expand the year argument into the list of years to process, newest first.
+     *   "2023"       -> [2023]
+     *   "2023-2015"  -> [2023, 2022, ..., 2015]
+     *   "all"        -> [current year, ..., min.year from configuration]
+     */
+    static List<Integer> parseYears(String spec) {
+        String s = spec == null ? "" : spec.trim().toLowerCase();
+        if (s.isEmpty()) {
+            s = ConfigManager.getDefaultYear();
+        }
+
+        int from;
+        int to;
+        if (s.equals("all")) {
+            from = Calendar.getInstance().get(Calendar.YEAR);
+            to = ConfigManager.getMinYear();
+        } else if (s.matches("\\d{4}-\\d{4}")) {
+            from = Integer.parseInt(s.substring(0, 4));
+            to = Integer.parseInt(s.substring(5, 9));
+        } else if (s.matches("\\d{4}")) {
+            from = Integer.parseInt(s);
+            to = from;
+        } else {
+            throw new IllegalArgumentException("Year must be YYYY, YYYY-YYYY or 'all'. Got: " + spec);
+        }
+
+        if (to > from) {
+            int t = from; from = to; to = t;
+        }
+
+        List<Integer> years = new ArrayList<>();
+        for (int y = from; y >= to; y--) {
+            years.add(y);
+        }
+        return years;
+    }
+
+    /**
+     * Submit every unprocessed abstract for one publication year to the executor.
+     *
+     * Uses keyset pagination: every fetch starts strictly after the last PMID already
+     * submitted, so a PMID that is still queued or in flight is never fetched again.
+     * Filtering on last_update_date alone re-selected rows that were waiting in the
+     * queue and sent each abstract to the LLM several times.
+     *
+     * @return number of records submitted for this year
+     */
+    private static int submitYear(int year, java.sql.Date ludDate, ThreadPoolExecutor executor) {
+        int batchSize = 500;  // Larger batches for better throughput
+        int maxQueueSize = 2000;  // Maximum tasks in queue before waiting
+        int submitted = 0;
+        String lastPmid = "";
+
+        String batchQuery =
+                "SELECT pmid, abstract FROM solr_docs " +
+                "WHERE (last_update_date < ? OR last_update_date IS NULL) " +
+                "AND p_year = ? " +
+                "AND abstract IS NOT NULL " +
+                "AND pmid > ? " +
+                "ORDER BY pmid " +
+                "FETCH FIRST " + batchSize + " ROWS ONLY";
+
+        while (true) {
+            // Check if we should stop based on stop time
+            if (shouldStop()) {
+                System.out.println("\nStop time reached (" + stopTime.substring(0, 2) + ":" + stopTime.substring(2, 4) + "). Stopping submission of new tasks...");
+                submissionStopped = true;
+                return submitted;
+            }
+
+            // BACKPRESSURE: Wait if queue is too large
+            while (executor.getQueue().size() > maxQueueSize) {
+                int queueSize = executor.getQueue().size();
+                int activeThreads = executor.getActiveCount();
+                System.out.println("Queue full (" + queueSize + " tasks). Waiting for workers... (Active: " + activeThreads + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
+                try {
+                    Thread.sleep(5000);  // Wait 5 seconds for queue to drain
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    submissionStopped = true;
+                    return submitted;
+                }
+            }
+
+            List<AbstractRecord> batch = new ArrayList<>();
+
+            // Load the next batch of records after the last PMID already submitted
+            try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(batchQuery)) {
+
+                stmt.setDate(1, ludDate);
+                stmt.setInt(2, year);
+                stmt.setString(3, lastPmid);
+
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        batch.add(new AbstractRecord(rs.getString("pmid"), rs.getString("abstract")));
+                    }
+                }
+            } catch (Exception e) {
+                // SQLException from the query, or a checked Exception from DataSourceFactory
+                System.err.println("ERROR loading batch for year " + year + ": " + e.getMessage());
+                e.printStackTrace();
+                submissionStopped = true;
+                return submitted;
+            }
+
+            if (batch.isEmpty()) {
+                System.out.println("Year " + year + ": no records remain after PMID '" + lastPmid + "'.");
+                return submitted;
+            }
+
+            // Submit batch to executor
+            for (AbstractRecord record : batch) {
+                executor.submit(new PostgressAILoader(record.abstractText, record.pmid));
+                submitted++;
+            }
+            lastPmid = batch.get(batch.size() - 1).pmid;
+
+            int queueSize = executor.getQueue().size();
+            System.out.println("Year " + year + ": submitted batch of " + batch.size() + " (year total: " + submitted + ", Queue: " + queueSize + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
+
+            // If batch is smaller than batchSize, we're approaching the end
+            if (batch.size() < batchSize) {
+                System.out.println("Small batch received (" + batch.size() + "), may be near completion.");
+            }
+        }
+    }
+
     public static void main(String[] args) throws Exception {
 
         // DEBUG: Print all arguments received
@@ -644,6 +778,9 @@ public class PostgressAILoader implements Runnable {
         aiModel = args.length > 0 ? args[0] : ConfigManager.getDefaultAiModel();
         threads = args.length > 1 ? Integer.parseInt(args[1]) : ConfigManager.getDefaultThreads();
         pubYear = args.length > 2 ? args[2] : ConfigManager.getDefaultYear();
+
+        // Years to process, newest first: "2023", "2023-2015" or "all"
+        List<Integer> years = parseYears(pubYear);
 
         // Optional PMID filter - treat empty string as null
         if (args.length > 3 && args[3] != null && !args[3].trim().isEmpty()) {
@@ -672,7 +809,11 @@ public class PostgressAILoader implements Runnable {
         if (pmidFilter != null) {
             System.out.println("Processing Single PMID: " + pmidFilter);
         } else {
-            System.out.println("Publication Year: " + pubYear);
+            if (years.size() == 1) {
+                System.out.println("Publication Year: " + years.get(0));
+            } else {
+                System.out.println("Publication Years: " + years.get(0) + " down to " + years.get(years.size() - 1) + " (" + years.size() + " years, newest first)");
+            }
             System.out.println("Last Update Date Filter: " + lud);
         }
         if (stopTime != null) {
@@ -708,93 +849,18 @@ public class PostgressAILoader implements Runnable {
                     e.printStackTrace();
                 }
             }
-            // Batch mode: process by year
+            // Batch mode: process one or more publication years, newest first
             else {
-                int batchSize = 500;  // Larger batches for better throughput
-                int maxQueueSize = 2000;  // Maximum tasks in queue before waiting
-                boolean hasMoreRecords = true;
-
-                // Keyset pagination: every fetch starts strictly after the last PMID already
-                // submitted, so a PMID that is still queued or in flight is never fetched again.
-                // Filtering on last_update_date alone re-selected rows that were waiting in the
-                // queue and sent each abstract to the LLM several times.
-                String lastPmid = "";
-                int pubYearInt = Integer.parseInt(pubYear);
                 java.sql.Date ludDate = java.sql.Date.valueOf(lud);
 
-                String batchQuery =
-                        "SELECT pmid, abstract FROM solr_docs " +
-                        "WHERE (last_update_date < ? OR last_update_date IS NULL) " +
-                        "AND p_year = ? " +
-                        "AND abstract IS NOT NULL " +
-                        "AND pmid > ? " +
-                        "ORDER BY pmid " +
-                        "FETCH FIRST " + batchSize + " ROWS ONLY";
+                for (int year : years) {
+                    System.out.println("\n---- Year " + year + ": starting at " + sdf.format(new Date()) + " ----");
+                    int submitted = submitYear(year, ludDate, executor);
+                    totalSubmitted += submitted;
+                    System.out.println("---- Year " + year + ": " + submitted + " records submitted (running total " + totalSubmitted + ") ----");
 
-                while (hasMoreRecords) {
-                    // Check if we should stop based on stop time
-                    if (shouldStop()) {
-                        System.out.println("\nStop time reached (" + stopTime.substring(0, 2) + ":" + stopTime.substring(2, 4) + "). Stopping submission of new tasks...");
-                        hasMoreRecords = false;
+                    if (submissionStopped) {
                         break;
-                    }
-
-                    // BACKPRESSURE: Wait if queue is too large
-                    while (executor.getQueue().size() > maxQueueSize) {
-                        int queueSize = executor.getQueue().size();
-                        int activeThreads = executor.getActiveCount();
-                        System.out.println("Queue full (" + queueSize + " tasks). Waiting for workers... (Active: " + activeThreads + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
-                        try {
-                            Thread.sleep(5000);  // Wait 5 seconds for queue to drain
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            hasMoreRecords = false;
-                            break;
-                        }
-                    }
-
-                    if (!hasMoreRecords) break;
-
-                    List<AbstractRecord> batch = new ArrayList<>();
-
-                    // Load the next batch of records after the last PMID already submitted
-                    try (Connection conn = DataSourceFactory.getInstance().getPostgressDataSource().getConnection();
-                         PreparedStatement stmt = conn.prepareStatement(batchQuery)) {
-
-                        stmt.setDate(1, ludDate);
-                        stmt.setInt(2, pubYearInt);
-                        stmt.setString(3, lastPmid);
-
-                        try (ResultSet rs = stmt.executeQuery()) {
-                            while (rs.next()) {
-                                batch.add(new AbstractRecord(rs.getString("pmid"), rs.getString("abstract")));
-                            }
-                        }
-                    } catch (SQLException e) {
-                        System.err.println("ERROR loading batch: " + e.getMessage());
-                        e.printStackTrace();
-                        break;
-                    }
-
-                    if (batch.isEmpty()) {
-                        System.out.println("No records remain after PMID " + lastPmid + ". All records submitted.");
-                        hasMoreRecords = false;
-                        break;
-                    }
-
-                    // Submit batch to executor
-                    for (AbstractRecord record : batch) {
-                        executor.submit(new PostgressAILoader(record.abstractText, record.pmid));
-                        totalSubmitted++;
-                    }
-                    lastPmid = batch.get(batch.size() - 1).pmid;
-
-                    int queueSize = executor.getQueue().size();
-                    System.out.println("Submitted batch of " + batch.size() + " records (Total: " + totalSubmitted + ", Queue: " + queueSize + ", Success: " + totalSuccess.get() + ", Failures: " + totalFailures.get() + ")");
-
-                    // If batch is smaller than batchSize, we're approaching the end
-                    if (batch.size() < batchSize) {
-                        System.out.println("Small batch received (" + batch.size() + "), may be near completion.");
                     }
                 }
             }

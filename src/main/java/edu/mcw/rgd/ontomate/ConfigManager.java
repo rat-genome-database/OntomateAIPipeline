@@ -121,4 +121,9 @@ public class ConfigManager {
     public static String getDefaultYear() {
         return getProperty("default.year", "2025");
     }
+
+    // Oldest publication year processed when the year argument is "all"
+    public static int getMinYear() {
+        return getIntProperty("min.year", 1990);
+    }
 }
